@@ -15,8 +15,9 @@
 - seed: 42
 
 ## Results
-- Best epoch: 5
-- Train loss: 0.1940
-- Test loss: 0.1814
-- Train AUC: 0.9242
-- Test AUC: 0.9319
+- Best epoch: 7
+- Train loss: 0.1928
+- Test loss: 0.1817
+- Train AUC: 0.9241
+- Test AUC: 0.9325
+

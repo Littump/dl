@@ -10,6 +10,7 @@
 ## Results
 - Best epoch: 10
 - Train loss: 0.1998
-- Test loss: 0.1922
+- Test loss: 0.1913
 - Train AUC: 0.9236
-- Test AUC: 0.9286
+- Test AUC: 0.9297
+

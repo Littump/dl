@@ -5,7 +5,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
 
 class LoanDataset(Dataset):
-    def __init__(self, csv_file, transform=True):
+    def __init__(self, csv_file, transform=True, numerical_scaler=None, categorical_encoder=None):
         self.loan_data = pd.read_csv(csv_file)
         self.transform = transform
 
@@ -23,15 +23,17 @@ class LoanDataset(Dataset):
         self.cat_cols = self.X.select_dtypes(include=['object']).columns.tolist()
         self.num_cols = self.X.select_dtypes(include=['number']).columns.tolist()
 
+        self.numerical_scaler = numerical_scaler or StandardScaler()
+        self.categorical_encoder = categorical_encoder or OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+
         if self.transform:
-            self._fit_transformers()
+            if numerical_scaler is None and categorical_encoder is None:
+                self._fit_transformers()
             self._transform_features()
 
     def _fit_transformers(self):
-        self.numerical_scaler = StandardScaler()
         self.numerical_scaler.fit(self.X[self.num_cols])
 
-        self.categorical_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
         if self.cat_cols:
             self.categorical_encoder.fit(self.X[self.cat_cols])
 
@@ -78,7 +80,13 @@ class LoanDataset(Dataset):
 def get_data_loaders(train_path, test_path, batch_size=32, transform=True):
     print(f"Loading data from {train_path} and {test_path}")
     train_dataset = LoanDataset(train_path, transform=transform)
-    test_dataset = LoanDataset(test_path, transform=transform)
+
+    test_dataset = LoanDataset(
+        test_path,
+        transform=transform,
+        numerical_scaler=train_dataset.numerical_scaler,
+        categorical_encoder=train_dataset.categorical_encoder
+    )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
