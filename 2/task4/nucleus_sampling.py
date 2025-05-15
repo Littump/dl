@@ -1,5 +1,5 @@
 from lib.model import TextGenerator
-from lib.generation_utils import apply_temperature, get_top_p_tokens, normalize_logits
+from lib.generation_utils import apply_temperature
 from lib.logger import setup_logger
 import torch
 
@@ -14,8 +14,23 @@ def nucleus_sample_decode(generator, prompt, temperature, top_p):
     for _ in range(generator.max_length):
         logits = generator.get_next_token_logits(input_ids, attention_mask)
         logits = apply_temperature(logits, temperature)
-        logits = get_top_p_tokens(logits, top_p)
-        probs = normalize_logits(logits)
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+
+        sorted_probs, sorted_indices = torch.sort(probs, descending=True)
+        cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+
+        mask = cumulative_probs < top_p
+        mask[..., 1:] = mask[..., :-1].clone()
+        mask[..., 0] = True
+
+        sorted_probs = sorted_probs.masked_fill(~mask, 0.0)
+
+        sum_probs = sorted_probs.sum(dim=-1, keepdim=True)
+        sorted_probs = sorted_probs / sum_probs
+
+        probs = torch.zeros_like(logits)
+        probs.scatter_(-1, sorted_indices, sorted_probs)
+
         next_token = torch.multinomial(probs, num_samples=1).item()
         generated_ids.append(next_token)
         input_ids = torch.cat([input_ids, torch.tensor([[next_token]])], dim=1)

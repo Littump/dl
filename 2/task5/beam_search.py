@@ -2,7 +2,7 @@ from lib.model import TextGenerator
 from lib.logger import setup_logger
 import torch
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 
 @dataclass
@@ -21,13 +21,13 @@ def beam_search_decode(generator, prompt, num_beams, length_penalty):
     finished_candidates = []
 
     logits = generator.get_next_token_logits(input_ids, attention_mask)
-    probs = torch.nn.functional.softmax(logits, dim=-1)
+    log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
 
-    top_k_probs, top_k_indices = torch.topk(probs, num_beams)
+    top_k_log_probs, top_k_indices = torch.topk(log_probs, num_beams)
 
     for i in range(num_beams):
-        token_id = top_k_indices[i].item()
-        score = top_k_probs[i].item()
+        token_id = top_k_indices[0][i].item()
+        score = top_k_log_probs[0][i].item()
         is_finished = (token_id == generator.eos_token_id)
 
         candidate = Candidate(
@@ -58,13 +58,13 @@ def beam_search_decode(generator, prompt, num_beams, length_penalty):
                 candidate_input_ids,
                 candidate_attention_mask
             )
-            probs = torch.nn.functional.softmax(logits, dim=-1)
+            log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
 
-            top_k_probs, top_k_indices = torch.topk(probs, num_beams)
+            top_k_log_probs, top_k_indices = torch.topk(log_probs, num_beams)
 
             for i in range(num_beams):
-                token_id = top_k_indices[i].item()
-                new_score = candidate.score * top_k_probs[i].item()
+                token_id = top_k_indices[0][i].item()
+                new_score = candidate.score + top_k_log_probs[0][i].item()
                 is_finished = (token_id == generator.eos_token_id)
 
                 new_candidate = Candidate(
@@ -86,13 +86,22 @@ def beam_search_decode(generator, prompt, num_beams, length_penalty):
 
     all_candidates = finished_candidates + current_candidates
 
-    all_candidates = sorted(
-        all_candidates,
-        key=lambda x: x.score / (len(x.token_ids) ** length_penalty),
-        reverse=True
-    )
+    # Если есть законченные кандидаты - выбираем только из них
+    if finished_candidates:
+        best_candidates = sorted(
+            finished_candidates,
+            key=lambda x: x.score / (len(x.token_ids) ** length_penalty),
+            reverse=True
+        )
+    else:
+        # Иначе берем из всех доступных
+        best_candidates = sorted(
+            all_candidates,
+            key=lambda x: x.score / (len(x.token_ids) ** length_penalty),
+            reverse=True
+        )
 
-    return all_candidates[0].token_ids
+    return best_candidates[0].token_ids
 
 
 def main():
